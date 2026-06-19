@@ -1,0 +1,197 @@
+"""
+Database operations for SmartHire AI.
+Handles loading, saving, and managing candidate data.
+"""
+
+import pandas as pd
+from pathlib import Path
+from typing import List, Dict, Any, Optional
+from app.utils.logger import get_logger
+from app.utils.config import CANDIDATES_FILE, OUTPUT_RANKING_FILE
+
+logger = get_logger("Database")
+
+
+class Database:
+    """
+    Database service for candidate data management.
+    Uses CSV files for data storage in this MVP.
+    """
+
+    @staticmethod
+    def load_candidates() -> pd.DataFrame:
+        """
+        Load candidates from CSV file.
+        
+        Returns:
+            pd.DataFrame: Candidates DataFrame
+        """
+        candidates_path = Path(CANDIDATES_FILE)
+
+        try:
+            if not candidates_path.exists():
+                logger.warning(f"Candidates file not found at {CANDIDATES_FILE}")
+                return pd.DataFrame()
+
+            logger.info(f"Loading candidates from {CANDIDATES_FILE}...")
+            df = pd.read_csv(CANDIDATES_FILE)
+            logger.info(f"Loaded {len(df)} candidates")
+            return df
+
+        except Exception as e:
+            logger.error(f"Error loading candidates: {str(e)}")
+            raise
+
+    @staticmethod
+    def get_candidates() -> List[Dict[str, Any]]:
+        """
+        Get all candidates as list of dicts.
+        
+        Returns:
+            List[Dict]: Candidates as list of dictionaries
+        """
+        df = Database.load_candidates()
+        if df.empty:
+            logger.warning("No candidates found")
+            return []
+
+        # Convert NaN to None for JSON serialization
+        return df.where(pd.notna(df), None).to_dict(orient="records")
+
+    @staticmethod
+    def get_candidate_by_id(candidate_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get candidate by ID.
+        
+        Args:
+            candidate_id (str): Candidate ID
+            
+        Returns:
+            Dict: Candidate data or None
+        """
+        df = Database.load_candidates()
+
+        if df.empty:
+            return None
+
+        # Try different ID column names
+        id_columns = ['id', 'candidate_id', 'cand_id', 'ID']
+        for col in id_columns:
+            if col in df.columns:
+                result = df[df[col] == candidate_id]
+                if not result.empty:
+                    return result.iloc[0].to_dict()
+
+        logger.warning(f"Candidate {candidate_id} not found")
+        return None
+
+    @staticmethod
+    def save_ranking_results(results: List[Dict[str, Any]], output_path: str = OUTPUT_RANKING_FILE) -> None:
+        """
+        Save ranking results to CSV.
+        
+        Args:
+            results (List[Dict]): Ranking results
+            output_path (str): Output file path
+        """
+        try:
+            output_dir = Path(output_path).parent
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            df = pd.DataFrame(results)
+            logger.info(f"Saving {len(results)} ranking results to {output_path}...")
+            df.to_csv(output_path, index=False)
+            logger.info(f"Ranking results saved successfully")
+
+        except Exception as e:
+            logger.error(f"Error saving ranking results: {str(e)}")
+            raise
+
+    @staticmethod
+    def create_sample_candidates(output_path: str = CANDIDATES_FILE) -> None:
+        """
+        Create sample candidate data for testing.
+        
+        Args:
+            output_path (str): Path to save sample data
+        """
+        sample_data = [
+            {
+                "id": "cand_001",
+                "name": "John Doe",
+                "skills": "Python, FastAPI, Docker, AWS",
+                "experience": 5,
+                "education": "BTech",
+                "projects": "Project A, Project B",
+                "certifications": "AWS Certified",
+                "activity_score": 0.95
+            },
+            {
+                "id": "cand_002",
+                "name": "Jane Smith",
+                "skills": "Python, Django, PostgreSQL, Kubernetes",
+                "experience": 4,
+                "education": "Master",
+                "projects": "Project C, Project D",
+                "certifications": "Kubernetes Certified",
+                "activity_score": 0.92
+            },
+            {
+                "id": "cand_003",
+                "name": "Bob Johnson",
+                "skills": "Java, Spring, Docker, GCP",
+                "experience": 6,
+                "education": "BTech",
+                "projects": "Project E, Project F",
+                "certifications": "GCP Certified",
+                "activity_score": 0.88
+            },
+            {
+                "id": "cand_004",
+                "name": "Alice Williams",
+                "skills": "Python, FastAPI, Redis, AWS, Machine Learning",
+                "experience": 7,
+                "education": "Master",
+                "projects": "ML Project, Data Pipeline",
+                "certifications": "AWS Certified, ML Certified",
+                "activity_score": 0.96
+            },
+            {
+                "id": "cand_005",
+                "name": "Charlie Brown",
+                "skills": "Python, Flask, MongoDB",
+                "experience": 2,
+                "education": "BTech",
+                "projects": "Internship Project",
+                "certifications": "",
+                "activity_score": 0.75
+            },
+        ]
+
+        try:
+            output_dir = Path(output_path).parent
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            df = pd.DataFrame(sample_data)
+            logger.info(f"Creating sample candidates at {output_path}...")
+            df.to_csv(output_path, index=False)
+            logger.info(f"Sample candidates created successfully")
+
+        except Exception as e:
+            logger.error(f"Error creating sample candidates: {str(e)}")
+            raise
+
+
+def load_candidates() -> pd.DataFrame:
+    """Load candidates from CSV."""
+    return Database.load_candidates()
+
+
+def get_candidates() -> List[Dict[str, Any]]:
+    """Get all candidates."""
+    return Database.get_candidates()
+
+
+def save_ranking_results(results: List[Dict[str, Any]]) -> None:
+    """Save ranking results."""
+    return Database.save_ranking_results(results)

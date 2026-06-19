@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  smarthire-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smarthire-ai-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - API_PORT=8000
+      - API_HOST=0.0.0.0
+      - MODEL_NAME=BAAI/bge-large-en-v1.5
+      - DEVICE=cpu
+      - TOP_K=100
+      - LOG_LEVEL=INFO
+      - ALPHA=0.4
+      - BETA=0.3
+      - GAMMA=0.2
+      - DELTA=0.1
+    volumes:
+      - ./data:/app/data
+      - ./docs/output:/app/docs/output
+    networks:
+      - smarthire-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  smarthire-network:
+    driver: bridge
+
+volumes:
+  data:

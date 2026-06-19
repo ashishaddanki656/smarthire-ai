@@ -1,0 +1,9 @@
+role,skills,experience,education,seniority
+Backend Engineer,"Python, FastAPI, Docker",3,BTech,Senior
+Frontend Developer,"React, TypeScript, CSS",2,BTech,Mid-level
+DevOps Engineer,"Kubernetes, AWS, Terraform",5,BTech,Senior
+Data Scientist,"Python, Machine Learning, Statistics",3,MSc,Mid-level
+Full Stack Developer,"JavaScript, React, Node.js, MongoDB",4,BTech,Senior
+System Architect,"System Design, Cloud Architecture, Microservices",8,MSc,Principal
+ML Engineer,"Python, TensorFlow, PyTorch, Statistics",4,MSc,Senior
+Cloud Engineer,"AWS, Azure, GCP, Terraform",6,BTech,Senior

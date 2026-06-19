@@ -1,0 +1,11 @@
+name,skills,experience,education,certifications,projects
+John Doe,"Python, FastAPI, Docker, AWS",5,BTech,"AWS Solutions Architect, Docker Certified",Project A
+Jane Smith,"Java, Spring Boot, Kubernetes",8,BTech,Kubernetes Certified,Project B
+Bob Johnson,"Python, Machine Learning, TensorFlow",3,MSc,Machine Learning Certificate,Project C
+Alice Williams,"React, Node.js, MongoDB",4,BTech,None,Project D
+Charlie Brown,"Go, Rust, DevOps",6,BTech,Certified Kubernetes Administrator,Project E
+Diana Prince,"C++, System Design, Linux",7,MSc,None,Project F
+Eve Davis,"JavaScript, TypeScript, AWS Lambda",3,BTech,AWS Developer Associate,Project G
+Frank Miller,"Python, Django, PostgreSQL",5,BTech,None,Project H
+Grace Lee,"Scala, Apache Spark, Big Data",6,MSc,Data Engineer Certified,Project I
+Henry Wilson,"TypeScript, React, Node.js",2,BTech,None,Project J
