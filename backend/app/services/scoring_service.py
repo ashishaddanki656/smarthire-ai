@@ -150,6 +150,37 @@ def calculate_clean_activity_score(
         float: Clean activity score (0-1)
     """
     try:
+        explicit_activity = candidate_profile.get("activity_score")
+        if explicit_activity is not None:
+            try:
+                activity = float(explicit_activity)
+                return min(max(activity, 0.0), 1.0)
+            except (TypeError, ValueError):
+                pass
+
+        profile_completeness = candidate_profile.get("profile_completeness_score")
+        if profile_completeness is not None:
+            try:
+                completeness = float(profile_completeness)
+                if completeness > 1:
+                    completeness = completeness / 100
+
+                recruiter_response = float(candidate_profile.get("recruiter_response_rate") or 0)
+                github_activity = float(candidate_profile.get("github_activity_score") or 0)
+                if github_activity > 1:
+                    github_activity = github_activity / 10
+                interview_completion = float(candidate_profile.get("interview_completion_rate") or 0)
+
+                score = (
+                    0.55 * completeness +
+                    0.20 * recruiter_response +
+                    0.15 * github_activity +
+                    0.10 * interview_completion
+                )
+                return min(max(score, 0.0), 1.0)
+            except (TypeError, ValueError):
+                logger.debug("Could not parse activity feature columns; using profile heuristic")
+
         score = 1.0  # Start with perfect score
         
         # Penalty for missing name

@@ -136,4 +136,7 @@ Thumbs.db
 # Project specific
 data/faiss_index.bin
 data/faiss_id_mapping.pkl
+data/processed/
+data/indexes/
+data/model_cache/
 docs/output/

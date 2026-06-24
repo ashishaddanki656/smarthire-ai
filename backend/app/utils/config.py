@@ -10,16 +10,24 @@ import os
 load_dotenv()
 
 # ==================== EMBEDDING MODEL ====================
-MODEL_NAME = os.getenv("MODEL_NAME", "BAAI/bge-large-en-v1.5")
-MODEL_DIMENSION = 1024  # BGE Large embedding dimension
+# SR's provided candidate_embeddings.npy/faiss.index are 768-dimensional.
+# Use BGE base by default so query embeddings match those artifacts.
+MODEL_NAME = os.getenv("MODEL_NAME", "BAAI/bge-base-en-v1.5")
+MODEL_DIMENSION = int(os.getenv("MODEL_DIMENSION", 768))
 
 # ==================== FAISS CONFIGURATION ====================
 TOP_K = int(os.getenv("TOP_K", 100))  # Retrieve top 100 candidates
-FAISS_INDEX_PATH = os.getenv("FAISS_INDEX_PATH", "data/faiss_index.bin")
+FAISS_INDEX_PATH = os.getenv("FAISS_INDEX_PATH", "data/indexes/faiss.index")
 FAISS_ID_MAPPING_PATH = os.getenv("FAISS_ID_MAPPING_PATH", "data/faiss_id_mapping.pkl")
 
 # ==================== DATABASE CONFIGURATION ====================
-CANDIDATES_FILE = os.getenv("CANDIDATES_FILE", "data/candidates.csv")
+CANDIDATES_FILE = os.getenv("CANDIDATES_FILE", "data/processed/candidates_clean.csv")
+SAMPLE_CANDIDATES_FILE = os.getenv("SAMPLE_CANDIDATES_FILE", "data/candidates.csv")
+CANDIDATE_EMBEDDINGS_PATH = os.getenv(
+    "CANDIDATE_EMBEDDINGS_PATH",
+    "data/processed/candidate_embeddings.npy",
+)
+CANDIDATE_IDS_FILE = os.getenv("CANDIDATE_IDS_FILE", "data/processed/candidate_ids.csv")
 OUTPUT_RANKING_FILE = os.getenv("OUTPUT_RANKING_FILE", "docs/output/ranked_output.csv")
 
 # ==================== RANKING WEIGHTS ====================

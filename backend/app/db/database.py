@@ -7,7 +7,7 @@ import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from app.utils.logger import get_logger
-from app.utils.config import CANDIDATES_FILE, OUTPUT_RANKING_FILE
+from app.utils.config import CANDIDATES_FILE, OUTPUT_RANKING_FILE, SAMPLE_CANDIDATES_FILE
 
 logger = get_logger("Database")
 
@@ -30,17 +30,63 @@ class Database:
 
         try:
             if not candidates_path.exists():
-                logger.warning(f"Candidates file not found at {CANDIDATES_FILE}")
-                return pd.DataFrame()
+                sample_path = Path(SAMPLE_CANDIDATES_FILE)
+                if sample_path.exists():
+                    logger.warning(
+                        f"Candidates file not found at {CANDIDATES_FILE}; "
+                        f"falling back to {SAMPLE_CANDIDATES_FILE}"
+                    )
+                    candidates_path = sample_path
+                else:
+                    logger.warning(f"Candidates file not found at {CANDIDATES_FILE}")
+                    return pd.DataFrame()
 
-            logger.info(f"Loading candidates from {CANDIDATES_FILE}...")
-            df = pd.read_csv(CANDIDATES_FILE)
+            logger.info(f"Loading candidates from {candidates_path}...")
+            df = pd.read_csv(candidates_path)
+            df = Database._normalize_candidate_columns(df)
             logger.info(f"Loaded {len(df)} candidates")
             return df
 
         except Exception as e:
             logger.error(f"Error loading candidates: {str(e)}")
             raise
+
+    @staticmethod
+    def _normalize_candidate_columns(df: pd.DataFrame) -> pd.DataFrame:
+        """Normalize SR dataset columns into the fields used by ranking."""
+        if df.empty:
+            return df
+
+        normalized = df.copy()
+
+        rename_map = {
+            "candidate_id": "id",
+            "years_experience": "experience",
+            "education_text": "education",
+            "certs_text": "certifications",
+            "career_text": "projects",
+            "profile_completeness": "profile_completeness_score",
+        }
+        normalized = normalized.rename(
+            columns={old: new for old, new in rename_map.items() if old in normalized.columns}
+        )
+
+        if "skills" not in normalized.columns:
+            for source_col in ("top_skills_text", "skills_list", "assessment_skills_text"):
+                if source_col in normalized.columns:
+                    normalized["skills"] = normalized[source_col]
+                    break
+
+        if "activity_score" not in normalized.columns and "profile_completeness_score" in normalized.columns:
+            normalized["activity_score"] = normalized["profile_completeness_score"].fillna(0) / 100
+
+        if "candidate_text" not in normalized.columns and "embedding_text" in normalized.columns:
+            normalized["candidate_text"] = normalized["embedding_text"]
+
+        if "name" not in normalized.columns:
+            normalized["name"] = normalized.get("id", "Unknown")
+
+        return normalized
 
     @staticmethod
     def get_candidates() -> List[Dict[str, Any]]:

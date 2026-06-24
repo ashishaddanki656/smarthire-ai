@@ -3,13 +3,23 @@ Embedding Service for SmartHire AI.
 Generates embeddings for JD and candidate profiles using BGE model.
 """
 
-from sentence_transformers import SentenceTransformer
 import numpy as np
-from typing import List, Union
+from pathlib import Path
+from typing import List
 from app.utils.logger import get_logger
 from app.utils.config import MODEL_NAME, DEVICE, MODEL_DIMENSION
 
 logger = get_logger("EmbeddingService")
+
+
+def _ensure_local_model_cache() -> None:
+    """Keep Hugging Face cache inside the project when no cache is configured."""
+    import os
+
+    cache_dir = Path("data/model_cache")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("HF_HOME", str(cache_dir))
+    os.environ.setdefault("TRANSFORMERS_CACHE", str(cache_dir))
 
 
 class EmbeddingService:
@@ -24,9 +34,19 @@ class EmbeddingService:
     def get_model(cls):
         """Lazy load embedding model (singleton pattern)."""
         if cls._model is None:
-            logger.info(f"Loading embedding model: {MODEL_NAME}")
-            cls._model = SentenceTransformer(MODEL_NAME, device=DEVICE)
-            logger.info("Embedding model loaded successfully")
+            try:
+                _ensure_local_model_cache()
+                from sentence_transformers import SentenceTransformer
+
+                logger.info(f"Loading embedding model: {MODEL_NAME}")
+                cls._model = SentenceTransformer(MODEL_NAME, device=DEVICE)
+                logger.info("Embedding model loaded successfully")
+            except Exception as exc:
+                logger.error(f"Could not load embedding model: {exc}")
+                raise RuntimeError(
+                    "Embedding model could not be loaded. Check that torch/sentence-transformers "
+                    "are installed and allowed by Windows security policy."
+                ) from exc
         return cls._model
 
     @staticmethod

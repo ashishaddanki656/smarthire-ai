@@ -5,13 +5,14 @@ Integrates AS (AI & Backend) with CH (Chaturya & Rohith) modules.
 """
 
 from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Any
+from typing import Dict, Any
 import numpy as np
+from pathlib import Path
 from app.schemas.jd_schema import JDRequest
 from app.schemas.candidate_schema import RankingResponse
 from app.services.jd_parser import parse_jd
 from app.services.embedding_service import generate_jd_embedding, generate_embeddings_batch
-from app.services.faiss_service import build_index, add_vectors, search_top_k
+from app.services.faiss_service import build_index, add_vectors, load_index, search_top_k
 from app.services.bias_removal_service import remove_bias
 from app.services.scoring_service import (
     calculate_semantic_score,
@@ -32,11 +33,88 @@ from app.services.explanation_service import (
 )
 from app.db.database import get_candidates, save_ranking_results
 from app.utils.logger import get_logger
-from app.utils.config import TOP_K, ALPHA, BETA, GAMMA, DELTA
+from app.utils.config import (
+    TOP_K,
+    ALPHA,
+    BETA,
+    GAMMA,
+    DELTA,
+    CANDIDATE_EMBEDDINGS_PATH,
+    FAISS_INDEX_PATH,
+)
 
 logger = get_logger("RankingRoute")
 
 router = APIRouter()
+
+
+def _split_list(value: Any) -> list:
+    """Convert CSV-ish string/list values into a list of clean strings."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value).strip()
+    if not text or text.lower() in {"none", "nan"}:
+        return []
+    text = text.strip("[]")
+    return [item.strip().strip("'\"") for item in text.split(",") if item.strip()]
+
+
+def _candidate_profile_text(candidate: Dict[str, Any]) -> str:
+    """Build candidate text for fallback embedding generation."""
+    if candidate.get("candidate_text"):
+        return str(candidate["candidate_text"])
+    if candidate.get("embedding_text"):
+        return str(candidate["embedding_text"])
+
+    profile_parts = [
+        candidate.get("name", ""),
+        candidate.get("headline", ""),
+        candidate.get("summary", ""),
+        candidate.get("skills", ""),
+        candidate.get("education", ""),
+        candidate.get("experience", ""),
+        candidate.get("projects", ""),
+        candidate.get("certifications", ""),
+    ]
+    return " ".join(str(part) for part in profile_parts if part is not None)
+
+
+def _experience_years(value: Any) -> int:
+    """Convert numeric/string experience values into whole years."""
+    try:
+        if value is None:
+            return 0
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _public_candidate(candidate: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep ranking response useful without returning every raw dataset column."""
+    allowed_keys = [
+        "id",
+        "name",
+        "headline",
+        "summary",
+        "location",
+        "country",
+        "current_title",
+        "current_company",
+        "skills",
+        "experience",
+        "education",
+        "certifications",
+        "projects",
+        "profile_completeness_score",
+        "activity_score",
+        "open_to_work",
+        "recruiter_response_rate",
+        "github_activity_score",
+        "interview_completion_rate",
+    ]
+    return {key: candidate.get(key) for key in allowed_keys if key in candidate}
 
 
 @router.post("/rank", response_model=RankingResponse, tags=["Ranking"])
@@ -49,8 +127,8 @@ def rank_candidates(request: JDRequest):
     1. Parse JD -> extract skills, experience, education, etc.
     2. Generate JD embedding (BGE model)
     3. Load candidates from database
-    4. Generate candidate embeddings (batch)
-    5. Build FAISS index
+    4. Load SR precomputed candidate embeddings and FAISS index, when available
+    5. Fall back to building FAISS index only for small local sample data
     6. Search top-k candidates
     7. Remove referral bias (fair ranking)
     8. Calculate 4 scores per candidate:
@@ -98,41 +176,56 @@ def rank_candidates(request: JDRequest):
             raise HTTPException(status_code=404, detail="No candidates found in database")
         logger.info(f"   Loaded {len(candidates)} candidates")
 
-        # Step 4: Generate candidate embeddings (batch)
-        logger.info("Step 4: Generating Candidate Embeddings (Batch)...")
-        candidate_texts = []
+        # Step 4: Remove bias and prepare candidate text
+        logger.info("Step 4: Removing Bias and Preparing Candidate Profiles...")
         candidate_ids = []
         clean_candidates = []
 
         for candidate in candidates:
             # Remove bias fields FIRST for fair ranking
             clean_cand = remove_bias(candidate.copy())
-
-            # Create profile text for embedding
-            profile_parts = [
-                str(clean_cand.get("name", "")),
-                str(clean_cand.get("skills", "")),
-                str(clean_cand.get("education", "")),
-                str(clean_cand.get("experience", "")),
-                str(clean_cand.get("projects", "")),
-                str(clean_cand.get("certifications", ""))
-            ]
-            profile_text = " ".join(profile_parts)
-
-            candidate_texts.append(profile_text)
             candidate_ids.append(clean_cand.get("id", f"cand_{len(candidate_ids)}"))
             clean_candidates.append(clean_cand)
 
-        # Batch embed
-        candidate_embeddings = generate_embeddings_batch(candidate_texts)
-        logger.info(f"   Batch embeddings shape: {candidate_embeddings.shape}")
+        index_path = Path(FAISS_INDEX_PATH)
+        embeddings_path = Path(CANDIDATE_EMBEDDINGS_PATH)
+        use_precomputed = index_path.exists() and embeddings_path.exists()
 
-        # Step 5: Build FAISS index
-        logger.info("Step 5: Building FAISS Index (IndexFlatIP)...")
-        dim = len(jd_embedding)
-        build_index(dim)
-        add_vectors(candidate_embeddings, candidate_ids)
-        logger.info(f"   FAISS index built with {len(candidates)} vectors")
+        if use_precomputed:
+            # SR deliverable path: precompute once, then only load/search during ranking.
+            logger.info("Step 5: Loading SR Precomputed FAISS Index and Embeddings...")
+            candidate_embeddings = np.load(embeddings_path, mmap_mode="r")
+            index = load_index(str(index_path))
+            if index is None:
+                raise ValueError(f"Could not load FAISS index at {index_path}")
+            if index.d != len(jd_embedding):
+                raise ValueError(
+                    f"FAISS index dimension {index.d} does not match JD embedding "
+                    f"dimension {len(jd_embedding)}. Regenerate SR artifacts with {len(jd_embedding)} dimensions "
+                    "or set MODEL_NAME/MODEL_DIMENSION to match the artifacts."
+                )
+            if index.ntotal != len(candidate_embeddings):
+                raise ValueError(
+                    f"FAISS index vectors ({index.ntotal}) do not match embeddings "
+                    f"rows ({len(candidate_embeddings)})"
+                )
+            if len(clean_candidates) < index.ntotal:
+                raise ValueError(
+                    f"Candidate rows ({len(clean_candidates)}) are fewer than FAISS vectors ({index.ntotal})"
+                )
+            logger.info(
+                f"   Loaded index vectors={index.ntotal}, dim={index.d}; "
+                f"embeddings shape={candidate_embeddings.shape}"
+            )
+        else:
+            # Developer/sample path: build an in-memory index for the small CSV.
+            logger.info("Step 5: Building FAISS Index from Sample Candidates...")
+            candidate_texts = [_candidate_profile_text(candidate) for candidate in clean_candidates]
+            candidate_embeddings = generate_embeddings_batch(candidate_texts)
+            logger.info(f"   Batch embeddings shape: {candidate_embeddings.shape}")
+            build_index(len(jd_embedding))
+            add_vectors(candidate_embeddings, candidate_ids)
+            logger.info(f"   FAISS index built with {len(candidates)} vectors")
 
         # Step 6: Search top-k
         logger.info(f"Step 6: Semantic Search - Retrieving Top {TOP_K} Candidates...")
@@ -146,7 +239,8 @@ def rank_candidates(request: JDRequest):
         all_candidates_with_scores = []
         
         for rank_idx, (faiss_score, faiss_idx) in enumerate(zip(faiss_scores[0], faiss_indices[0])):
-            if faiss_idx < len(clean_candidates):
+            faiss_idx = int(faiss_idx)
+            if faiss_idx >= 0 and faiss_idx < len(clean_candidates):
                 candidate = clean_candidates[faiss_idx].copy()
                 
                 # ====== SCORE 1: SEMANTIC SCORE ======
@@ -159,24 +253,20 @@ def rank_candidates(request: JDRequest):
                 # ====== SCORE 2: SKILL SCORE ======
                 # Match required skills with candidate skills
                 required_skills = jd_data.get('skills', [])
-                candidate_skills = candidate.get('skills', [])
-                if isinstance(candidate_skills, str):
-                    candidate_skills = [s.strip() for s in candidate_skills.split(',')]
+                candidate_skills = _split_list(candidate.get('skills', []))
                 
                 skill_score = calculate_skill_score(required_skills, candidate_skills)
                 
                 # ====== SCORE 3: CAREER SCORE ======
                 # Experience, education, certifications matching
-                candidate_experience = int(candidate.get('experience', 0))
+                candidate_experience = _experience_years(candidate.get('experience', 0))
                 required_experience = jd_data.get('experience', 3)
                 
                 education_match = candidate.get('education', '').lower() in (
                     jd_data.get('education', '').lower() or ''
                 )
                 
-                certifications = candidate.get('certifications', [])
-                if isinstance(certifications, str):
-                    certifications = [c.strip() for c in certifications.split(',') if c.strip()]
+                certifications = _split_list(candidate.get('certifications', []))
                 
                 career_score = calculate_career_score(
                     candidate_experience,
@@ -206,7 +296,7 @@ def rank_candidates(request: JDRequest):
                 )
                 
                 # Combine with candidate data
-                candidate_with_scores = {**candidate, **scores}
+                candidate_with_scores = {**_public_candidate(candidate), **scores}
                 all_candidates_with_scores.append(candidate_with_scores)
         
         logger.info(f"   Calculated scores for {len(all_candidates_with_scores)} candidates")

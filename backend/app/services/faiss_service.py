@@ -75,6 +75,12 @@ class FAISSService:
 
         try:
             query_vector = np.array([query_vector], dtype=np.float32)
+            if query_vector.shape[1] != FAISSService._index.d:
+                raise ValueError(
+                    f"Query dimension {query_vector.shape[1]} does not match "
+                    f"FAISS index dimension {FAISSService._index.d}"
+                )
+
             query_norm = np.linalg.norm(query_vector, axis=1, keepdims=True)
             query_norm[query_norm == 0] = 1.0
             query_vector = query_vector / query_norm
@@ -163,3 +169,13 @@ def add_vectors(vectors: np.ndarray, candidate_ids: List[str] = None) -> None:
 def search_top_k(query_vector: np.ndarray, k: int = 100) -> Tuple[np.ndarray, np.ndarray]:
     """Search for top-k vectors."""
     return FAISSService.search_top_k(query_vector, k)
+
+
+def load_index(path: str = FAISS_INDEX_PATH) -> Optional[faiss.IndexFlatIP]:
+    """Load FAISS index from disk."""
+    return FAISSService.load_index(path)
+
+
+def get_index_stats() -> dict:
+    """Get loaded FAISS index statistics."""
+    return FAISSService.get_index_stats()
