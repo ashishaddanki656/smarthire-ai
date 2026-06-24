@@ -86,7 +86,41 @@ class Database:
         if "name" not in normalized.columns:
             normalized["name"] = normalized.get("id", "Unknown")
 
+        if "id" not in normalized.columns:
+            normalized.insert(0, "id", [f"cand_{idx + 1:03d}" for idx in range(len(normalized))])
+
         return normalized
+
+    @staticmethod
+    def load_jobs() -> pd.DataFrame:
+        """Load job rows from the root data folder."""
+        jobs_path = Path("data/jobs.csv")
+
+        try:
+            if not jobs_path.exists():
+                logger.warning("Jobs file not found at data/jobs.csv")
+                return pd.DataFrame()
+
+            logger.info(f"Loading jobs from {jobs_path}...")
+            df = pd.read_csv(jobs_path)
+            if "id" not in df.columns:
+                df.insert(0, "id", [f"job_{idx + 1:03d}" for idx in range(len(df))])
+            logger.info(f"Loaded {len(df)} jobs")
+            return df
+
+        except Exception as e:
+            logger.error(f"Error loading jobs: {str(e)}")
+            raise
+
+    @staticmethod
+    def get_jobs() -> List[Dict[str, Any]]:
+        """Get all jobs as a list of dictionaries."""
+        df = Database.load_jobs()
+        if df.empty:
+            logger.warning("No jobs found")
+            return []
+
+        return df.where(pd.notna(df), None).to_dict(orient="records")
 
     @staticmethod
     def get_candidates() -> List[Dict[str, Any]]:
@@ -236,6 +270,11 @@ def load_candidates() -> pd.DataFrame:
 def get_candidates() -> List[Dict[str, Any]]:
     """Get all candidates."""
     return Database.get_candidates()
+
+
+def get_jobs() -> List[Dict[str, Any]]:
+    """Get all jobs."""
+    return Database.get_jobs()
 
 
 def save_ranking_results(results: List[Dict[str, Any]]) -> None:

@@ -10,6 +10,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.jd import router as jd_router
 from app.api.routes.candidate import router as candidate_router
 from app.api.routes.rank import router as rank_router
+from app.api.routes.jobs import router as jobs_router
 from app.utils.logger import get_logger
 from app.utils.config import API_TITLE, API_DESCRIPTION, API_VERSION
 
@@ -39,6 +40,7 @@ app.include_router(health_router)
 app.include_router(jd_router)
 app.include_router(candidate_router)
 app.include_router(rank_router)
+app.include_router(jobs_router)
 
 
 @app.get("/", tags=["Root"])
@@ -60,6 +62,7 @@ def root():
             "health": "/health",
             "parse_jd": "/parse-jd",
             "candidates": "/candidates",
+            "jobs": "/jobs",
             "rank": "/rank"
         }
     }
