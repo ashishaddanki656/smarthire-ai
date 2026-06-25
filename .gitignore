@@ -140,3 +140,5 @@ data/processed/
 data/indexes/
 data/model_cache/
 docs/output/
+
+backend/data

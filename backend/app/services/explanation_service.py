@@ -11,69 +11,67 @@ logger = get_logger("ExplanationService")
 
 
 def generate_explanation(candidate: Dict[str, Any]) -> str:
-    """
-    Generate human-readable explanation for candidate ranking.
-    
-    Args:
-        candidate: Candidate with scores
-        
-    Returns:
-        str: Human-readable explanation
-    """
+
     try:
-        explanations = []
-        
-        # Semantic fit explanation
+
         semantic = candidate.get('semantic_score', 0)
-        if semantic > 0.85:
-            explanations.append(f"Excellent semantic match ({semantic:.1%}) with job description")
-        elif semantic > 0.70:
-            explanations.append(f"Good semantic match ({semantic:.1%}) with job requirements")
-        elif semantic > 0.50:
-            explanations.append(f"Moderate semantic match ({semantic:.1%}) with job description")
-        else:
-            explanations.append(f"Limited semantic match ({semantic:.1%}) - profile differs from JD")
-        
-        # Skill match explanation
         skill = candidate.get('skill_score', 0)
-        if skill > 0.85:
-            explanations.append(f"Strong skill alignment ({skill:.1%}) - has most required skills")
-        elif skill > 0.70:
-            explanations.append(f"Good skill match ({skill:.1%}) with required competencies")
-        elif skill > 0.50:
-            explanations.append(f"Partial skill match ({skill:.1%}) - missing some key skills")
-        else:
-            explanations.append(f"Limited skills ({skill:.1%}) - significant skill gaps remain")
-        
-        # Career fit explanation
         career = candidate.get('career_score', 0)
-        if career > 0.85:
-            explanations.append(f"Excellent career progression ({career:.1%}) and deep relevant experience")
-        elif career > 0.70:
-            explanations.append(f"Good career fit ({career:.1%}) with relevant background")
-        elif career > 0.50:
-            explanations.append(f"Moderate experience ({career:.1%}) - meets minimum requirements")
-        else:
-            explanations.append(f"Limited experience ({career:.1%}) - early in career")
-        
-        # Clean activity explanation
         clean = candidate.get('clean_activity', 0)
-        if clean > 0.85:
-            explanations.append("Profile appears genuine with strong application quality")
-        elif clean > 0.70:
-            explanations.append("Profile appears legitimate with good activity patterns")
-        elif clean > 0.50:
-            explanations.append("Profile has some quality concerns but appears authentic")
-        else:
-            explanations.append("Profile shows signs of incomplete information or suspicious activity")
-        
-        explanation_text = ". ".join(explanations) + "."
-        
-        logger.debug(f"Generated explanation for {candidate.get('name', 'Unknown')}")
-        return explanation_text
-        
+
+        strengths = []
+
+        if skill >= 0.8:
+            strengths.append(
+                "matches most required skills"
+            )
+        elif skill >= 0.6:
+            strengths.append(
+                "matches a good portion of required skills"
+            )
+
+        if career >= 0.8:
+            strengths.append(
+                "has strong relevant experience"
+            )
+        elif career >= 0.6:
+            strengths.append(
+                "meets experience expectations"
+            )
+
+        if semantic >= 0.8:
+            strengths.append(
+                "shows strong semantic alignment with the role"
+            )
+        elif semantic >= 0.6:
+            strengths.append(
+                "aligns reasonably well with the job description"
+            )
+
+        if clean >= 0.8:
+            strengths.append(
+                "maintains a high-quality and complete profile"
+            )
+
+        if not strengths:
+            return (
+                "Candidate demonstrates partial alignment "
+                "with the job requirements but may require "
+                "additional evaluation."
+            )
+
+        return (
+            "Candidate " +
+            ", ".join(strengths[:-1]) +
+            (" and " + strengths[-1] if len(strengths) > 1 else strengths[0]) +
+            "."
+        )
+
     except Exception as e:
-        logger.error(f"Error generating explanation: {str(e)}")
+        logger.error(
+            f"Error generating explanation: {str(e)}"
+        )
+
         return "Unable to generate explanation."
 
 
@@ -169,7 +167,14 @@ def extract_strengths(
         if matching_skills:
             match_count = len(matching_skills)
             total_count = len(required_skills_lower)
-            strengths.append(f"Possesses {match_count} of {total_count} required skills")
+            matched_original = [
+                s for s in required_skills
+                if s.lower() in candidate_skills_lower
+            ]
+
+            strengths.append(
+                f"Matched skills: {', '.join(matched_original[:5])}"
+            )
         
         # Experience match
         candidate_exp = candidate.get('experience', 0)
@@ -243,7 +248,9 @@ def extract_gaps(
         # Missing skills
         missing_skills = [s for s in required_skills_lower if s not in candidate_skills_lower]
         if missing_skills:
-            gaps.append(f"Would benefit from learning: {', '.join(missing_skills[:3])}")
+            gaps.append(
+                f"Missing required skills: {', '.join(missing_skills[:5])}"
+            )
         
         # Experience gap
         candidate_exp = candidate.get('experience', 0)

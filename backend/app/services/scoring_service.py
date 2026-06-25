@@ -59,34 +59,51 @@ def calculate_skill_score(
     required_skills: List[str],
     candidate_skills: List[str]
 ) -> float:
-    """
-    Calculate skill match score.
-    Score = (matched_skills / total_required_skills) with multipliers
-    
-    Args:
-        required_skills: Required skills list
-        candidate_skills: Candidate's skills list
-        
-    Returns:
-        float: Skill score (0-1)
-    """
     try:
         if not required_skills:
             return 1.0
-        
-        # Convert to lowercase and strip whitespace
-        required_lower = [skill.lower().strip() for skill in required_skills]
-        candidate_lower = [skill.lower().strip() for skill in candidate_skills]
-        
-        # Count exact matches
-        exact_matches = sum(1 for skill in required_lower if skill in candidate_lower)
-        
-        # Calculate score
-        score = exact_matches / len(required_skills) if required_skills else 0.0
-        
-        logger.debug(f"Skill score: {score:.4f} ({exact_matches}/{len(required_skills)})")
+
+        SKILL_ALIASES = {
+            "aws": ["amazon web services"],
+            "amazon web services": ["aws"],
+            "javascript": ["js"],
+            "js": ["javascript"],
+            "postgresql": ["postgres"],
+            "postgres": ["postgresql"],
+            "machine learning": ["ml"],
+            "ml": ["machine learning"],
+            "artificial intelligence": ["ai"],
+            "ai": ["artificial intelligence"],
+            "c++": ["cpp"],
+            "cpp": ["c++"]
+        }
+
+        def normalize(skill):
+            skill = skill.lower().strip()
+            aliases = SKILL_ALIASES.get(skill, [])
+            return [skill] + aliases
+
+        candidate_set = set()
+
+        for skill in candidate_skills:
+            candidate_set.update(normalize(skill))
+
+        matches = 0
+
+        for req in required_skills:
+            req_variants = normalize(req)
+
+            if any(v in candidate_set for v in req_variants):
+                matches += 1
+
+        score = matches / len(required_skills)
+
+        logger.debug(
+            f"Skill score: {score:.4f} ({matches}/{len(required_skills)})"
+        )
+
         return min(max(score, 0.0), 1.0)
-        
+
     except Exception as e:
         logger.error(f"Error calculating skill score: {str(e)}")
         return 0.0

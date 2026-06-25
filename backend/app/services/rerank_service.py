@@ -6,6 +6,7 @@ Responsible: Team Member 4 (Chaturya/Rohith)
 
 from typing import List, Dict, Any
 from app.utils.logger import get_logger
+import re
 
 logger = get_logger("RerankService")
 
@@ -134,33 +135,35 @@ def apply_fairness_constraints(
 def remove_duplicates(
     candidates: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
-    """
-    Remove duplicate candidates (same person applied multiple times).
-    
-    Args:
-        candidates: Ranked candidates
-        
-    Returns:
-        Deduplicated candidates
-    """
+
     try:
         seen_names = set()
         unique_candidates = []
         duplicates_removed = 0
-        
+
         for candidate in candidates:
-            name = candidate.get('name', '').lower().strip()
+
+            raw_name = candidate.get("name", "")
+
+            name = re.sub(
+                r"\s+",
+                " ",
+                raw_name.strip().lower()
+            )
+
             if name and name not in seen_names:
                 seen_names.add(name)
                 unique_candidates.append(candidate)
             else:
                 duplicates_removed += 1
-        
+
         if duplicates_removed > 0:
-            logger.info(f"Removed {duplicates_removed} duplicate candidates")
-        
+            logger.info(
+                f"Removed {duplicates_removed} duplicate candidates"
+            )
+
         return unique_candidates
-        
+
     except Exception as e:
         logger.error(f"Error removing duplicates: {str(e)}")
         return candidates
